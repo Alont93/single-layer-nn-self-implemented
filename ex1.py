@@ -51,7 +51,7 @@ def display_pca_conponents():
     pca.display('')
 
 
-def arrage_data_set_for_emotions(emo1, emo0):
+def arrange_data_set_for_emotions(emo1, emo0):
     images, labels = import_data()
 
     indices_of_emo1 = np.where(labels == emo1)[0]
@@ -81,7 +81,20 @@ def arrage_data_set_for_emotions(emo1, emo0):
     test_images = relevant_images[validation_ratio:]
     test_labels = relevant_labels[validation_ratio:]
 
-    x = 1
+    return training_images, validation_images, test_images, training_labels, validation_labels, test_labels
 
 
-arrage_data_set_for_emotions('h','m')
+def gaussian_pdf(sample, mean, std):
+    var = std ** 2
+    denom = (2 * np.pi * var) ** .5
+    num = np.exp(-(sample - mean) ** 2 / (2 * var))
+    return num/denom
+
+
+def logistic_regression(image, weights, mean1, std1, mean0, std0, data_ratio):
+    a = np.log((gaussian_pdf(image, mean1, std1)) * data_ratio / (gaussian_pdf(image, mean0, std0)) * (1- data_ratio))
+    return 1 / (1 + np.exp(-a))
+
+
+def train_data():
+    training_images, validation_images, test_images, training_labels, validation_labels, test_labels = arrage_data_set_for_emotions('h','m')
