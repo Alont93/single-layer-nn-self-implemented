@@ -6,6 +6,8 @@ from pca import *
 
 EMOTIONS = ['h','ht','m','s','f','a','d','n']
 PCA_NUMBER_OF_COMPONENT = 6
+LEARNING_RATE = 1
+GRADIENT_DECENT_ITERATION = 10
 TRAINING_PERCENTAGE = 0.6
 VALIDATION_PERCENTAGE = 0.2
 TEST_PERCENTAGE = 0.2
@@ -72,6 +74,8 @@ def arrange_data_set_for_emotions(emo1, emo0):
     relevant_labels[relevant_labels == emo1] = 1
     relevant_labels[relevant_labels == emo0] = 0
 
+    relevant_labels = relevant_labels.astype(np.int)
+
     training_images = relevant_images[:training_ratio]
     training_labels = relevant_labels[:training_ratio]
 
@@ -84,17 +88,73 @@ def arrange_data_set_for_emotions(emo1, emo0):
     return training_images, validation_images, test_images, training_labels, validation_labels, test_labels
 
 
-def gaussian_pdf(sample, mean, std):
-    var = std ** 2
-    denom = (2 * np.pi * var) ** .5
-    num = np.exp(-(sample - mean) ** 2 / (2 * var))
-    return num/denom
+def logistic_regression(samples, weights):
+    a = samples @ weights
+    p = 1 / (1 + np.exp(-a))
+
+    return p
 
 
-def logistic_regression(image, weights, mean1, std1, mean0, std0, data_ratio):
-    a = np.log((gaussian_pdf(image, mean1, std1)) * data_ratio / (gaussian_pdf(image, mean0, std0)) * (1- data_ratio))
-    return 1 / (1 + np.exp(-a))
+def batch_gradient_decent(samples, validation_samples, validation_labels, labels):
+    current_weights = np.zeros(PCA_NUMBER_OF_COMPONENT + 1)
+    best_loss = get_weights_loss(validation_samples, validation_labels, current_weights)
+    best_weights = current_weights
 
+    for t in range(GRADIENT_DECENT_ITERATION):
+        logistic_results = logistic_regression(samples, current_weights)
+        loss_gradient = (labels - logistic_results) @ samples
+        current_weights = current_weights + LEARNING_RATE * loss_gradient
+
+        current_loss = get_weights_loss(validation_samples, validation_labels, current_weights)
+        if best_loss > current_loss:
+            best_loss = current_loss
+            best_weights = current_weights
+
+    return current_weights
+
+
+def run_pca_on_samples(pca, images):
+    number_of_images = images.shape[0]
+    pca_images = np.empty(((number_of_images, 1, PCA_NUMBER_OF_COMPONENT)))
+
+    for i in range(number_of_images):
+        pca_images[i] = pca.transform(images[i])
+
+    return pca_images
+
+
+def add_bias_coordinate(pca, pca_images):
+    number_of_images = pca_images.shape[0]
+    pca_images = pca_images.reshape((number_of_images, PCA_NUMBER_OF_COMPONENT))
+    bias_coordinates = np.ones((number_of_images, 1))
+    return np.hstack((pca_images,bias_coordinates))
+
+def regression_loss(labels, prediction):
+    return -np.mean(labels * np.log(prediction) + (1-labels) * np.log(1-prediction))
 
 def train_data():
-    training_images, validation_images, test_images, training_labels, validation_labels, test_labels = arrage_data_set_for_emotions('h','m')
+    training_images, validation_images, test_images, \
+    training_labels, validation_labels, test_labels = arrange_data_set_for_emotions('h','m')
+    
+    pca = PCA(PCA_NUMBER_OF_COMPONENT)
+    pca.fit(training_images)
+
+    training_pca_images = run_pca_on_samples(pca, training_images)
+    validation_pca_images = run_pca_on_samples(pca, validation_images)
+    test_pca_images = run_pca_on_samples(pca, test_images)
+
+    training_pca_images = add_bias_coordinate(pca, training_pca_images)
+    validation_pca_images = add_bias_coordinate(pca, validation_pca_images)
+    test_pca_images = add_bias_coordinate(pca, test_pca_images)
+    weights = batch_gradient_decent(training_pca_images, validation_pca_images, validation_labels, training_labels)
+
+    loss = get_weights_loss(test_pca_images, test_labels, weights)
+    x = 1
+
+
+def get_weights_loss(pca_images, labels, weights):
+    prediction = logistic_regression(pca_images, weights)
+    return regression_loss(labels, prediction)
+
+
+train_data()
