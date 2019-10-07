@@ -11,23 +11,28 @@ GRADIENT_DECENT_ITERATION = 10
 TRAINING_PERCENTAGE = 0.6
 VALIDATION_PERCENTAGE = 0.2
 TEST_PERCENTAGE = 0.2
+NUMBER_OF_EMOTIONS = 8
+NUMBER_OF_SUBJECTS = 20
 
 
 def simplify_labels(filename):
     labels = find_between(filename, '_', '.')
     return labels[:-1]
 
+
 def find_between(s, first, last):
     start = s.index(first) + len(first)
     end = s.index(last, start)
     return s[start:end]
+
 
 def import_data():
     images, labels = load_data()
     for i in range(len(labels)):
         labels[i] = simplify_labels(labels[i])
 
-    return np.array(images), np.array(labels)
+    return np.array(images), np.array(labels), np.repeat(np.arange(-50,50,10), 5)
+
 
 def different_emotions_figure():
     images, labels = import_data()
@@ -36,6 +41,7 @@ def different_emotions_figure():
         first_image_index = labels.index(emotion)
         emotion_image = images[first_image_index]
         display_face(emotion_image)
+
 
 def display_pca_conponents():
     images, labels = import_data()
@@ -47,7 +53,7 @@ def display_pca_conponents():
     transformed_images = np.empty(images.shape)
 
     for i in range(images.shape[0]):
-        pca_images[i] =  pca.transform(images[i])
+        pca_images[i] = pca.transform(images[i])
         transformed_images[i] = pca.inverse_transform(pca_images[i])
 
     pca.display('')
