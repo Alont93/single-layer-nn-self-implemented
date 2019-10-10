@@ -5,9 +5,10 @@ from dataloader import load_data, display_face
 from pca import *
 
 EMOTIONS = ['h','ht','m','s','f','a','d','n']
-PCA_NUMBER_OF_COMPONENT = 6
+PCA_NUMBER_OF_COMPONENT = 8
 LEARNING_RATE = 1
 EPOCHS = 10
+DECISION_THRESHOLD = 0.5
 TRAINING_PERCENTAGE = 0.6
 VALIDATION_PERCENTAGE = 0.2
 TEST_PERCENTAGE = 0.2
@@ -179,20 +180,33 @@ def train_data(principle_component_number):
     test_pca_images = add_bias_coordinate(test_pca_images)
     weights, training_errors, validation_errors = batch_gradient_decent(training_pca_images, training_labels,
                                                                         validation_pca_images, validation_labels)
+    accuracy = get_weights_accuracy(test_pca_images, test_labels, weights)
 
-    return training_errors, validation_errors
+    return training_errors, validation_errors, accuracy
 
 
+def get_weights_accuracy(pca_images, labels, weights):
+    prediction = logistic_regression(pca_images, weights)
+    return regression_accuracy(labels, prediction)
+
+
+def regression_accuracy(labels, prediction):
+    prediction[prediction > DECISION_THRESHOLD] = 1
+    prediction[prediction <= DECISION_THRESHOLD] = 0
+    return 1 - np.sum(np.abs(labels - prediction)) / labels.size
 
 
 def train_n_times_for_k_principle_components(n, k):
     all_training_errors = np.zeros((n, EPOCHS + 1))
     all_validation_errors = np.zeros((n, EPOCHS + 1))
+    accuracies = np.zeros(n)
 
     for i in range(n):
-        training_errors, validation_errors = train_data(k)
+        training_errors, validation_errors, accuracy = train_data(k)
         all_training_errors[i] = training_errors
         all_validation_errors[i] = validation_errors
+        accuracies[i] = accuracy
+
 
     avg_training_errors = np.average(all_training_errors, axis=0)
     avg_validation_errors = np.average(all_validation_errors, axis=0)
@@ -203,7 +217,7 @@ def train_n_times_for_k_principle_components(n, k):
     plt.plot(avg_validation_errors, label="validation error")
     plt.xlabel("number of epochs")
     plt.ylabel("loss")
-    plt.title("Average errors as a function of number of epochs")
+    plt.title("Average error as a function of the number of epochs with " + str(k) + " principle components")
     plt.legend()
     plt.show()
 
@@ -212,6 +226,11 @@ def train_n_times_for_k_principle_components(n, k):
     for i in EPOCHS_TO_INCLUDE_STD:
         print("Epoch #" + str(i) + " std for training errors is " + str(std_training_errors[i]))
         print("Epoch #" + str(i) + " std for validation errors is " + str(std_validation_errors[i]))
+
+    print()
+    print("The average accuracy for all the five runs is " + str(np.average(accuracies)) +
+          " with std: " + str(np.std(accuracies)))
+
 
     x = 1
 
