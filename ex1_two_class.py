@@ -6,7 +6,7 @@ from pca import *
 
 EMOTIONS = ['h','ht','m','s','f','a','d','n']
 PCA_NUMBER_OF_COMPONENT = 8
-LEARNING_RATE = 1
+LEARNING_RATE = .015
 EPOCHS = 10
 DECISION_THRESHOLD = 0.5
 TRAINING_PERCENTAGE = 0.6
@@ -16,8 +16,8 @@ NUMBER_OF_EMOTIONS = 2
 NUMBER_OF_SUBJECTS = 10
 NUMBER_OF_RUNS = 5
 
-EMOTION1 = 'h'
-EMOTION0 = 'm'
+EMOTION1 = 'f'
+EMOTION0 = 's'
 
 EPOCHS_TO_INCLUDE_STD = [2, 4, 8, 10]
 
@@ -200,19 +200,15 @@ def train_n_times_for_k_principle_components(n, k):
     all_training_errors = np.zeros((n, EPOCHS + 1))
     all_validation_errors = np.zeros((n, EPOCHS + 1))
     accuracies = np.zeros(n)
-
     for i in range(n):
-        training_errors, validation_errors, accuracy = train_data(k)
-        all_training_errors[i] = training_errors
-        all_validation_errors[i] = validation_errors
-        accuracies[i] = accuracy
-
-
-    avg_training_errors = np.average(all_training_errors, axis=0)
-    avg_validation_errors = np.average(all_validation_errors, axis=0)
+           training_errors, validation_errors, accuracy = train_data(k)
+           all_training_errors[i] = training_errors
+           all_validation_errors[i] = validation_errors
+           accuracies[i] = accuracy
+           avg_training_errors = np.average(all_training_errors, axis=0)
+           avg_validation_errors = np.average(all_validation_errors, axis=0)
     std_training_errors = np.std(all_training_errors, axis=0)
     std_validation_errors = np.std(all_validation_errors, axis=0)
-
     plt.plot(avg_training_errors, label="training error")
     plt.plot(avg_validation_errors, label="validation error")
     plt.xlabel("number of epochs")
