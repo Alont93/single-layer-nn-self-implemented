@@ -21,7 +21,7 @@ RELAVENT_EMOTIONS = ['a', 'd', 'f', 'h', 'm', 's']
 UNWANTED_EMOTION = ['ht', 'n']
 
 EPOCHS_TO_INCLUDE_STD = [5, 10, 15, 20]
-
+IMAGE_SCALE = 255
 
 def simplify_labels(filename):
     labels = find_between(filename, '_', '.')
@@ -95,19 +95,24 @@ def get_shuffled_subject_indicies_for_all_emotions():
     return subjects_indices
 
 
-
-def batch_gradient_decent(samples, labels, validation_samples, validation_labels):
+def batch_gradient_decent(samples, labels, validation_samples, validation_labels, is_stochastic = True):
     current_weights = np.zeros((PCA_NUMBER_OF_COMPONENT + 1, NUMBER_OF_ALL_EMOTIONS))
     first_train_loss = get_softmax_weights_loss(samples, labels, current_weights)
     best_validation_loss = get_softmax_weights_loss(validation_samples, validation_labels, current_weights)
     best_weights = current_weights
 
+    number_of_training_samples = samples.shape[0]
     validation_errors = [best_validation_loss]
     training_errors = [first_train_loss]
 
     for t in range(EPOCHS):
         logistic_results = softmax_regression(samples, current_weights)
-        loss_gradient = (labels - logistic_results).T @ samples
+
+        leaning_order_indices = np.arange(number_of_training_samples)
+        if(is_stochastic):
+            np.random.shuffle(leaning_order_indices)
+
+        loss_gradient = (labels - logistic_results)[leaning_order_indices].T @ samples[leaning_order_indices]
         current_weights = current_weights + LEARNING_RATE * loss_gradient.T
 
         current_validation_loss = get_softmax_weights_loss(validation_samples, validation_labels, current_weights)
@@ -160,24 +165,65 @@ def train_data(principle_component_number):
     training_images, validation_images, test_images, \
     training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
 
-    pca = PCA(principle_component_number)
-    pca.fit(training_images)
+    test_pca_images, training_pca_images, validation_pca_images = run_pca_on_data(principle_component_number,
+                                                                                  test_images, training_images,
+                                                                                  validation_images)
 
-    training_pca_images = run_pca_on_samples(pca, training_images)
-    validation_pca_images = run_pca_on_samples(pca, validation_images)
-    test_pca_images = run_pca_on_samples(pca, test_images)
+    test_pca_images, training_pca_images, validation_pca_images = add_bias_column_to_data(test_pca_images,
+                                                                                          training_pca_images,
+                                                                                          validation_pca_images)
 
-    training_pca_images = add_bias_coordinate(training_pca_images)
-    validation_pca_images = add_bias_coordinate(validation_pca_images)
-    test_pca_images = add_bias_coordinate(test_pca_images)
     weights, training_errors, validation_errors = batch_gradient_decent(training_pca_images, training_labels,
-                                                                        validation_pca_images, validation_labels)
+                                                                        validation_pca_images, validation_labels, False)
 
     accuracy = get_softmax_weights_accuracy(test_pca_images, test_labels, weights)
     confusion_matrix = get_softmax_confusion_matrix(test_pca_images, test_labels, weights)
 
 
     return training_errors, validation_errors, accuracy, confusion_matrix
+
+
+def compare_batch_to_stocastic_training(principle_component_number):
+    training_images, validation_images, test_images, \
+    training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
+
+    test_pca_images, training_pca_images, validation_pca_images = run_pca_on_data(principle_component_number,
+                                                                                  test_images, training_images,
+                                                                                  validation_images)
+
+    test_pca_images, training_pca_images, validation_pca_images = add_bias_column_to_data(test_pca_images,
+                                                                                          training_pca_images,
+                                                                                          validation_pca_images)
+
+    weights, normal_training_errors, validation_errors = batch_gradient_decent(training_pca_images, training_labels,
+                                                                        validation_pca_images, validation_labels, False)
+
+    weights, stochastic_training_errors, validation_errors = batch_gradient_decent(training_pca_images, training_labels,
+                                                                        validation_pca_images, validation_labels, True)
+
+    plt.plot(normal_training_errors, label="batch training")
+    plt.plot(stochastic_training_errors, label="stochastic training")
+    plt.xlabel("number of epochs")
+    plt.ylabel("loss")
+    plt.title("Batch vs. Stochastic Errors")
+    plt.legend()
+    plt.show()
+
+
+def add_bias_column_to_data(test_pca_images, training_pca_images, validation_pca_images):
+    training_pca_images = add_bias_coordinate(training_pca_images)
+    validation_pca_images = add_bias_coordinate(validation_pca_images)
+    test_pca_images = add_bias_coordinate(test_pca_images)
+    return test_pca_images, training_pca_images, validation_pca_images
+
+
+def run_pca_on_data(principle_component_number, test_images, training_images, validation_images):
+    pca = PCA(principle_component_number)
+    pca.fit(training_images)
+    training_pca_images = run_pca_on_samples(pca, training_images)
+    validation_pca_images = run_pca_on_samples(pca, validation_images)
+    test_pca_images = run_pca_on_samples(pca, test_images)
+    return test_pca_images, training_pca_images, validation_pca_images
 
 
 def get_softmax_weights_accuracy(pca_images, labels, weights):
@@ -260,4 +306,40 @@ def train_n_times_for_k_principle_components(n, k):
     plt.show()
 
 
-train_n_times_for_k_principle_components(NUMBER_OF_RUNS, PCA_NUMBER_OF_COMPONENT)
+def visualize_weights(principle_component_number):
+    training_images, validation_images, test_images, \
+    training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
+
+    pca = PCA(principle_component_number)
+    pca.fit(training_images)
+
+    training_pca_images = run_pca_on_samples(pca, training_images)
+    validation_pca_images = run_pca_on_samples(pca, validation_images)
+    test_pca_images = run_pca_on_samples(pca, test_images)
+
+    test_pca_images, training_pca_images, validation_pca_images = add_bias_column_to_data(test_pca_images,
+                                                                                          training_pca_images,
+                                                                                          validation_pca_images)
+
+    weights, training_errors, validation_errors = batch_gradient_decent(training_pca_images, training_labels,
+                                                                        validation_pca_images, validation_labels,
+                                                                        False)
+
+    # removing the bias coordinates
+    first_pca_image = training_pca_images[0,:-1]
+    fig = plt.figure(figsize = (8,8))
+
+    for emotion in RELAVENT_EMOTIONS:
+        emotion_index = RELAVENT_EMOTIONS.index(emotion)
+        weight = weights[:-1, emotion_index]
+        emphasized_pca_image = np.inner(weight, first_pca_image)
+        recovered_image = pca.inverse_transform(emphasized_pca_image)
+        recovered_image = IMAGE_SCALE * (recovered_image - np.min(recovered_image)) / np.ptp(recovered_image).astype(int)
+
+        sub = fig.add_subplot(3, 3, emotion_index + 1)
+        plt.title(emotion)
+        plt.axis('off')
+        sub.imshow(recovered_image, cmap='gray')
+
+    fig.suptitle('Image emphasized with the different emotions weights', fontsize=20)
+    fig.show()
