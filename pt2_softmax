@@ -1,0 +1,225 @@
+import numpy as np
+import pandas as pd
+
+from dataloader import load_data, display_face
+from pca import *
+# from ex1_multi_class import logistic_regression
+
+EMOTIONS = ['h', 'ht', 'm', 's', 'f', 'a', 'd', 'n']
+PCA_NUMBER_OF_COMPONENT = 16
+LEARNING_RATE = .015
+EPOCHS = 20
+DECISION_THRESHOLD = 0.5
+TRAINING_PERCENTAGE = 0.6
+VALIDATION_PERCENTAGE = 0.2
+TEST_PERCENTAGE = 0.2
+NUMBER_OF_ALL_EMOTIONS = 6
+NUMBER_OF_SUBJECTS = 10
+NUMBER_OF_RUNS = 5
+
+UNWANTED_EMOTION = ['ht', 'n']
+
+EPOCHS_TO_INCLUDE_STD = [5, 10, 15, 20]
+
+
+def simplify_labels(filename):
+    labels = find_between(filename, '_', '.')
+    return labels[:-1]
+
+
+def find_between(s, first, last):
+    start = s.index(first) + len(first)
+    end = s.index(last, start)
+    return s[start:end]
+
+
+def import_data():
+    images, labels = load_data()
+    for i in range(len(labels)):
+        labels[i] = simplify_labels(labels[i])
+
+    return np.array(images), np.array(labels)
+
+
+def arrange_data_set_for_all_emotions():
+    images, labels = import_data()
+
+    subjects_indices = get_shuffled_subject_indicies_for_all_emotions()
+    relevant_images, relevant_labels = filter_relevant_subject(images, labels, subjects_indices)
+    relevant_labels = encode_onehot_labels(relevant_labels)
+
+    # Break down the data into training, testing and validation
+    training_ratio = int(subjects_indices.size * TRAINING_PERCENTAGE)
+    validation_ratio = int(subjects_indices.size * (TRAINING_PERCENTAGE + VALIDATION_PERCENTAGE))
+
+    relevant_labels = relevant_labels.astype(np.int)
+
+    training_images = relevant_images[:training_ratio]
+    training_labels = relevant_labels[:training_ratio]
+
+    validation_images = relevant_images[training_ratio: validation_ratio]
+    validation_labels = relevant_labels[training_ratio: validation_ratio]
+
+    test_images = relevant_images[validation_ratio:]
+    test_labels = relevant_labels[validation_ratio:]
+
+    return training_images, validation_images, test_images, training_labels, validation_labels, test_labels
+
+
+def encode_onehot_labels(relevant_labels):
+    data_table = pd.DataFrame({'emotion': relevant_labels})
+    data_table = data_table[~data_table['emotion'].isin(UNWANTED_EMOTION)]
+    data_table = pd.concat((data_table, pd.get_dummies(data_table.emotion)), 1)
+    data_table = data_table.drop(columns=['emotion'])
+    relevant_labels = data_table.values
+    return relevant_labels
+
+
+def filter_relevant_subject(images, labels, subjects_indices):
+    indices_of_wanted_emotions = np.where(np.logical_and(labels != UNWANTED_EMOTION[0], labels != UNWANTED_EMOTION[1]))[0]
+    relevant_images = images[indices_of_wanted_emotions][subjects_indices]
+    relevant_labels = labels[indices_of_wanted_emotions][subjects_indices]
+    return relevant_images, relevant_labels
+
+
+def get_shuffled_subject_indicies_for_all_emotions():
+    subjects_indices = np.arange(NUMBER_OF_SUBJECTS)
+    np.random.shuffle(subjects_indices)
+    subjects_indices = np.repeat(subjects_indices, NUMBER_OF_ALL_EMOTIONS)
+    subjects_indices *= NUMBER_OF_ALL_EMOTIONS
+    for j in range(NUMBER_OF_SUBJECTS):
+        for i in range(NUMBER_OF_ALL_EMOTIONS):
+            subjects_indices[i+(j*NUMBER_OF_ALL_EMOTIONS)] += i
+
+    return subjects_indices
+
+
+
+def batch_gradient_decent(samples, labels, validation_samples, validation_labels):
+    current_weights = np.zeros((PCA_NUMBER_OF_COMPONENT + 1, NUMBER_OF_ALL_EMOTIONS))
+    first_train_loss = get_softmax_weights_loss(samples, labels, current_weights)
+    best_validation_loss = get_softmax_weights_loss(validation_samples, validation_labels, current_weights)
+    best_weights = current_weights
+
+    validation_errors = [best_validation_loss]
+    training_errors = [first_train_loss]
+
+    for t in range(EPOCHS):
+        logistic_results = softmax_regression(samples, current_weights)
+        loss_gradient = (labels - logistic_results).T @ samples
+        current_weights = current_weights + LEARNING_RATE * loss_gradient.T
+
+        current_validation_loss = get_softmax_weights_loss(validation_samples, validation_labels, current_weights)
+        current_train_loss = get_softmax_weights_loss(samples, labels, current_weights)
+        validation_errors.append(current_validation_loss)
+        training_errors.append(current_train_loss)
+        if best_validation_loss > current_validation_loss:
+            best_validation_loss = current_validation_loss
+            best_weights = current_weights
+
+    return best_weights, np.array(training_errors), np.array(validation_errors)
+
+
+def softmax_regression(samples, weights):
+    a = samples @ weights
+    e_a = np.exp(a.T)
+    probabilities = e_a / e_a.sum(axis=0)
+    return probabilities.T
+
+
+def get_softmax_weights_loss(samples, labels, weights):
+    predictions = softmax_regression(samples, weights)
+    N = predictions.shape[0]
+    loss = -np.sum(labels * np.log(predictions)) / N
+    return loss
+
+
+def run_pca_on_samples(pca, images):
+    number_of_images = images.shape[0]
+    pca_images = np.empty(((number_of_images, 1, PCA_NUMBER_OF_COMPONENT)))
+
+    for i in range(number_of_images):
+        pca_images[i] = pca.transform(images[i])
+
+    return pca_images
+
+
+def add_bias_coordinate(pca_images):
+    number_of_images = pca_images.shape[0]
+    pca_images = pca_images.reshape((number_of_images, PCA_NUMBER_OF_COMPONENT))
+    bias_coordinates = np.ones((number_of_images, 1))
+    return np.hstack((pca_images, bias_coordinates))
+
+
+def regression_loss(labels, prediction):
+    return -np.mean(labels * np.log(prediction) + (1 - labels) * np.log(1 - prediction))
+
+
+def train_data(principle_component_number):
+    training_images, validation_images, test_images, \
+    training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
+
+    pca = PCA(principle_component_number)
+    pca.fit(training_images)
+
+    training_pca_images = run_pca_on_samples(pca, training_images)
+    validation_pca_images = run_pca_on_samples(pca, validation_images)
+    test_pca_images = run_pca_on_samples(pca, test_images)
+
+    training_pca_images = add_bias_coordinate(training_pca_images)
+    validation_pca_images = add_bias_coordinate(validation_pca_images)
+    test_pca_images = add_bias_coordinate(test_pca_images)
+    weights, training_errors, validation_errors = batch_gradient_decent(training_pca_images, training_labels,
+                                                                        validation_pca_images, validation_labels)
+    accuracy = get_softmax_weights_accuracy(test_pca_images, test_labels, weights)
+
+    return training_errors, validation_errors, accuracy
+
+
+def get_softmax_weights_accuracy(pca_images, labels, weights):
+    predictions = softmax_regression(pca_images, weights)
+    decisions = (predictions == predictions.max(axis=1)[:,None]).astype(np.int)
+
+    diff = labels + decisions
+    AGREEMENT_VALUE = 2
+    diff[diff < AGREEMENT_VALUE] = 0
+    diff[diff == AGREEMENT_VALUE] = 1
+
+    number_of_images = pca_images.shape[0]
+    return np.sum(diff) / number_of_images
+
+
+def train_n_times_for_k_principle_components(n, k):
+    all_training_errors = np.zeros((n, EPOCHS + 1))
+    all_validation_errors = np.zeros((n, EPOCHS + 1))
+    accuracies = np.zeros(n)
+    for i in range(n):
+        training_errors, validation_errors, accuracy = train_data(k)
+        all_training_errors[i] = training_errors
+        all_validation_errors[i] = validation_errors
+        accuracies[i] = accuracy
+        avg_training_errors = np.average(all_training_errors, axis=0)
+        avg_validation_errors = np.average(all_validation_errors, axis=0)
+    std_training_errors = np.std(all_training_errors, axis=0)
+    std_validation_errors = np.std(all_validation_errors, axis=0)
+    plt.plot(avg_training_errors, label="training error")
+    plt.plot(avg_validation_errors, label="validation error")
+    plt.xlabel("number of epochs")
+    plt.ylabel("loss")
+    plt.title("Average error as a function of the number of epochs with " + str(k) + " principle components")
+    plt.legend()
+    plt.show()
+
+    print()
+    print("STDs:")
+    for i in EPOCHS_TO_INCLUDE_STD:
+        print("Epoch #" + str(i) + " std for training errors is " + str(std_training_errors[i]))
+        print("Epoch #" + str(i) + " std for validation errors is " + str(std_validation_errors[i]))
+
+    print()
+    print("The average accuracy for all the five runs is " + str(np.average(accuracies)) +
+          " with std: " + str(np.std(accuracies)))
+
+    x = 1
+
+train_n_times_for_k_principle_components(NUMBER_OF_RUNS, PCA_NUMBER_OF_COMPONENT)
