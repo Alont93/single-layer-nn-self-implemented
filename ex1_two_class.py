@@ -21,17 +21,18 @@ EMOTION0 = 's'
 
 EPOCHS_TO_INCLUDE_STD = [2, 4, 8, 10]
 
+# parse labels from image name
 def simplify_labels(filename):
     labels = find_between(filename, '_', '.')
     return labels[:-1]
 
-
+# get string between two chars
 def find_between(s, first, last):
     start = s.index(first) + len(first)
     end = s.index(last, start)
     return s[start:end]
 
-
+# import data using downloader
 def import_data():
     images, labels = load_data()
     for i in range(len(labels)):
@@ -39,7 +40,7 @@ def import_data():
 
     return np.array(images), np.array(labels)
 
-
+# first emotion figure
 def different_emotions_figure():
     images, labels = import_data()
 
@@ -48,7 +49,7 @@ def different_emotions_figure():
         emotion_image = images[first_image_index]
         display_face(emotion_image)
 
-
+# third eigenvector figure drawer
 def display_pca_conponents():
     images, labels = import_data()
 
@@ -64,7 +65,7 @@ def display_pca_conponents():
 
     pca.display('')
 
-
+# arrange the data to test, validation and test sets
 def arrange_data_set_for_emotions(emo1, emo0):
     images, labels = import_data()
 
@@ -93,6 +94,7 @@ def arrange_data_set_for_emotions(emo1, emo0):
     return training_images, validation_images, test_images, training_labels, validation_labels, test_labels
 
 
+# get out of the matrix the unwanted emotions
 def filter_only_two_emotions_by_subject_order(emo0, emo1, images, labels, subjects_indices):
     indices_of_emo1 = np.where(labels == emo1)[0]
     indices_of_emo0 = np.where(labels == emo0)[0]
@@ -102,6 +104,7 @@ def filter_only_two_emotions_by_subject_order(emo0, emo1, images, labels, subjec
     return relevant_images, relevant_labels
 
 
+# shuffle the subjects
 def get_shuffled_subject_indicies():
     subjects_indices = np.arange(NUMBER_OF_SUBJECTS)
     np.random.shuffle(subjects_indices)
@@ -111,13 +114,14 @@ def get_shuffled_subject_indicies():
     return subjects_indices
 
 
+# calculate prediction using LR
 def logistic_regression(samples, weights):
     a = samples @ weights
     p = 1 / (1 + np.exp(-a))
 
     return p
 
-
+# batch gradient decent implementation for two classes
 def batch_gradient_decent(samples, labels, validation_samples, validation_labels):
     current_weights = np.zeros(PCA_NUMBER_OF_COMPONENT + 1)
     first_train_loss = get_weights_loss(samples, labels, current_weights)
@@ -143,6 +147,7 @@ def batch_gradient_decent(samples, labels, validation_samples, validation_labels
     return best_weights, np.array(training_errors), np.array(validation_errors)
 
 
+# apply pca on images
 def run_pca_on_samples(pca, images):
     number_of_images = images.shape[0]
     pca_images = np.empty(((number_of_images, 1, PCA_NUMBER_OF_COMPONENT)))
@@ -152,7 +157,7 @@ def run_pca_on_samples(pca, images):
 
     return pca_images
 
-
+# add 1 column to the PCAed image
 def add_bias_coordinate(pca_images):
     number_of_images = pca_images.shape[0]
     pca_images = pca_images.reshape((number_of_images, PCA_NUMBER_OF_COMPONENT))
@@ -160,10 +165,12 @@ def add_bias_coordinate(pca_images):
     return np.hstack((pca_images,bias_coordinates))
 
 
+# calculate the regression loss
 def regression_loss(labels, prediction):
     return -np.mean(labels * np.log(prediction) + (1-labels) * np.log(1-prediction))
 
 
+# run epochs of gradient decent over the data
 def train_data(principle_component_number):
     training_images, validation_images, test_images, \
     training_labels, validation_labels, test_labels = arrange_data_set_for_emotions(EMOTION1, EMOTION0)
@@ -185,17 +192,20 @@ def train_data(principle_component_number):
     return training_errors, validation_errors, accuracy
 
 
+# calculate the specific weights accuracy
 def get_weights_accuracy(pca_images, labels, weights):
     prediction = logistic_regression(pca_images, weights)
     return regression_accuracy(labels, prediction)
 
 
+# calculate the precision of the data
 def regression_accuracy(labels, prediction):
     prediction[prediction > DECISION_THRESHOLD] = 1
     prediction[prediction <= DECISION_THRESHOLD] = 0
     return 1 - np.sum(np.abs(labels - prediction)) / labels.size
 
 
+# repeat training process, average and print the results
 def train_n_times_for_k_principle_components(n, k):
     all_training_errors = np.zeros((n, EPOCHS + 1))
     all_validation_errors = np.zeros((n, EPOCHS + 1))
@@ -228,12 +238,7 @@ def train_n_times_for_k_principle_components(n, k):
           " with std: " + str(np.std(accuracies)))
 
 
-    x = 1
-
-
+# get spesific weights loss
 def get_weights_loss(pca_images, labels, weights):
     prediction = logistic_regression(pca_images, weights)
     return regression_loss(labels, prediction)
-
-
-train_n_times_for_k_principle_components(NUMBER_OF_RUNS, PCA_NUMBER_OF_COMPONENT)

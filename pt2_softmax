@@ -1,12 +1,9 @@
-import numpy as np
 import pandas as pd
-
-from dataloader import load_data, display_face
 from pca import *
-# from ex1_multi_class import logistic_regression
+from ex1_two_class import import_data, add_bias_coordinate, run_pca_on_samples
 
 EMOTIONS = ['h', 'ht', 'm', 's', 'f', 'a', 'd', 'n']
-PCA_NUMBER_OF_COMPONENT = 16
+PCA_NUMBER_OF_COMPONENT = 8
 LEARNING_RATE = .015
 EPOCHS = 20
 DECISION_THRESHOLD = 0.5
@@ -23,25 +20,7 @@ UNWANTED_EMOTION = ['ht', 'n']
 EPOCHS_TO_INCLUDE_STD = [5, 10, 15, 20]
 IMAGE_SCALE = 255
 
-def simplify_labels(filename):
-    labels = find_between(filename, '_', '.')
-    return labels[:-1]
-
-
-def find_between(s, first, last):
-    start = s.index(first) + len(first)
-    end = s.index(last, start)
-    return s[start:end]
-
-
-def import_data():
-    images, labels = load_data()
-    for i in range(len(labels)):
-        labels[i] = simplify_labels(labels[i])
-
-    return np.array(images), np.array(labels)
-
-
+# arrange the data to test, validation and test sets
 def arrange_data_set_for_all_emotions():
     images, labels = import_data()
 
@@ -66,7 +45,7 @@ def arrange_data_set_for_all_emotions():
 
     return training_images, validation_images, test_images, training_labels, validation_labels, test_labels
 
-
+# parse the lables to sparse matrix
 def encode_onehot_labels(relevant_labels):
     data_table = pd.DataFrame({'emotion': relevant_labels})
     data_table = data_table[~data_table['emotion'].isin(UNWANTED_EMOTION)]
@@ -76,6 +55,7 @@ def encode_onehot_labels(relevant_labels):
     return relevant_labels
 
 
+# keep only relavent subjects
 def filter_relevant_subject(images, labels, subjects_indices):
     indices_of_wanted_emotions = np.where(np.logical_and(labels != UNWANTED_EMOTION[0], labels != UNWANTED_EMOTION[1]))[0]
     relevant_images = images[indices_of_wanted_emotions][subjects_indices]
@@ -83,6 +63,7 @@ def filter_relevant_subject(images, labels, subjects_indices):
     return relevant_images, relevant_labels
 
 
+# shuffle the subjects
 def get_shuffled_subject_indicies_for_all_emotions():
     subjects_indices = np.arange(NUMBER_OF_SUBJECTS)
     np.random.shuffle(subjects_indices)
@@ -95,6 +76,7 @@ def get_shuffled_subject_indicies_for_all_emotions():
     return subjects_indices
 
 
+# batch and stochastic gradient decent implementation for two classes
 def batch_gradient_decent(samples, labels, validation_samples, validation_labels, is_stochastic = True):
     current_weights = np.zeros((PCA_NUMBER_OF_COMPONENT + 1, NUMBER_OF_ALL_EMOTIONS))
     first_train_loss = get_softmax_weights_loss(samples, labels, current_weights)
@@ -126,6 +108,7 @@ def batch_gradient_decent(samples, labels, validation_samples, validation_labels
     return best_weights, np.array(training_errors), np.array(validation_errors)
 
 
+# calculate the softmax predictions
 def softmax_regression(samples, weights):
     a = samples @ weights
     e_a = np.exp(a.T)
@@ -133,6 +116,7 @@ def softmax_regression(samples, weights):
     return probabilities.T
 
 
+# caculate the softmax predictions loss using cross enthropy
 def get_softmax_weights_loss(samples, labels, weights):
     predictions = softmax_regression(samples, weights)
     N = predictions.shape[0]
@@ -140,27 +124,7 @@ def get_softmax_weights_loss(samples, labels, weights):
     return loss
 
 
-def run_pca_on_samples(pca, images):
-    number_of_images = images.shape[0]
-    pca_images = np.empty(((number_of_images, 1, PCA_NUMBER_OF_COMPONENT)))
-
-    for i in range(number_of_images):
-        pca_images[i] = pca.transform(images[i])
-
-    return pca_images
-
-
-def add_bias_coordinate(pca_images):
-    number_of_images = pca_images.shape[0]
-    pca_images = pca_images.reshape((number_of_images, PCA_NUMBER_OF_COMPONENT))
-    bias_coordinates = np.ones((number_of_images, 1))
-    return np.hstack((pca_images, bias_coordinates))
-
-
-def regression_loss(labels, prediction):
-    return -np.mean(labels * np.log(prediction) + (1 - labels) * np.log(1 - prediction))
-
-
+# run epochs of gradient decent over the data
 def train_data(principle_component_number):
     training_images, validation_images, test_images, \
     training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
@@ -183,6 +147,7 @@ def train_data(principle_component_number):
     return training_errors, validation_errors, accuracy, confusion_matrix
 
 
+# GD methods commerce
 def compare_batch_to_stocastic_training(principle_component_number):
     training_images, validation_images, test_images, \
     training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
@@ -210,6 +175,7 @@ def compare_batch_to_stocastic_training(principle_component_number):
     plt.show()
 
 
+# add bias colums to all data
 def add_bias_column_to_data(test_pca_images, training_pca_images, validation_pca_images):
     training_pca_images = add_bias_coordinate(training_pca_images)
     validation_pca_images = add_bias_coordinate(validation_pca_images)
@@ -217,6 +183,7 @@ def add_bias_column_to_data(test_pca_images, training_pca_images, validation_pca
     return test_pca_images, training_pca_images, validation_pca_images
 
 
+# run pca on all the data
 def run_pca_on_data(principle_component_number, test_images, training_images, validation_images):
     pca = PCA(principle_component_number)
     pca.fit(training_images)
@@ -226,6 +193,7 @@ def run_pca_on_data(principle_component_number, test_images, training_images, va
     return test_pca_images, training_pca_images, validation_pca_images
 
 
+# calculate the specific weights accuracy
 def get_softmax_weights_accuracy(pca_images, labels, weights):
     predictions = softmax_regression(pca_images, weights)
     decisions = (predictions == predictions.max(axis=1)[:,None]).astype(np.int)
@@ -239,6 +207,7 @@ def get_softmax_weights_accuracy(pca_images, labels, weights):
     return np.sum(diff) / number_of_images
 
 
+# create and confusion matix from lables and prediction
 def get_softmax_confusion_matrix(pca_images, labels, weights):
     predictions = softmax_regression(pca_images, weights)
     decisions = (predictions == predictions.max(axis=1)[:, None]).astype(np.int)
@@ -254,6 +223,7 @@ def get_softmax_confusion_matrix(pca_images, labels, weights):
     return confusion_matrix
 
 
+# repeat training process, average and print the results
 def train_n_times_for_k_principle_components(n, k):
     all_training_errors = np.zeros((n, EPOCHS + 1))
     all_validation_errors = np.zeros((n, EPOCHS + 1))
@@ -306,6 +276,7 @@ def train_n_times_for_k_principle_components(n, k):
     plt.show()
 
 
+# for the last part, emphasize weight with inner product on the PCAed image and reverse
 def visualize_weights(principle_component_number):
     training_images, validation_images, test_images, \
     training_labels, validation_labels, test_labels = arrange_data_set_for_all_emotions()
